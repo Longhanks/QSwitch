@@ -1,0 +1,2 @@
+# QSwitch
+UISwitch for Qt
