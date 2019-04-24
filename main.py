@@ -4,7 +4,7 @@
 from typing import List
 import sys
 
-from PyQt5.QtCore import QSize, pyqtSignal, pyqtProperty
+from PyQt5.QtCore import Qt, QSize, pyqtSignal, pyqtProperty, QPropertyAnimation, QEasingCurve, QPointF
 from PyQt5.QtGui import QColor, QResizeEvent, QMouseEvent
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame, \
     QGraphicsDropShadowEffect
@@ -13,13 +13,58 @@ kAnimationDuration = 0.4
 kBorderLineWidth = 1
 kGoldenRatio = 1.61803398875
 kDecreasedGoldenRatio = 1.38
-kKnobBackgroundColor = QColor(255, 255, 255, 1)
-kDefaultTintColor = QColor(69, 219, 92, 1)
+kKnobBackgroundColor = QColor(255, 255, 255, 255)
+kDefaultTintColor = QColor(79, 220, 116, 255)
 kDisabledBorderColor = QColor(0, 0, 0, 51)
-kDisabledBackgroundColor = QColor(0, 0, 0, 0)
 kMargin = 2
 kMinimumWidth = 32
 kMinimumHeight = 20
+
+
+class _QSwitchLayer(QFrame):
+    _templateStyleSheet = '_QSwitchLayer {{ background: rgba({}, {}, {}, {}); border: {}px solid rgba({}, {}, {}, {}); border-radius: {}px; }}'
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.disabledBackgroundColor = self.palette().color(self.backgroundRole())
+        self._backgroundColor = self.disabledBackgroundColor
+        self._borderColor = kDisabledBorderColor
+        self._borderRadius = 0
+
+    def _applyStyleSheet(self):
+        self.setStyleSheet(
+            _QSwitchLayer._templateStyleSheet.format(self.backgroundColor.red(), self.backgroundColor.green(),
+                                                     self.backgroundColor.blue(), self.backgroundColor.alpha(),
+                                                     kBorderLineWidth, self.borderColor.red(), self.borderColor.green(),
+                                                     self.borderColor.blue(), self.borderColor.alpha(),
+                                                     self.borderRadius))
+
+    @pyqtProperty(QColor)
+    def backgroundColor(self):
+        return self._backgroundColor
+
+    @backgroundColor.setter
+    def backgroundColor(self, newValue):
+        self._backgroundColor = newValue
+        self._applyStyleSheet()
+
+    @pyqtProperty(QColor)
+    def borderColor(self):
+        return self._borderColor
+
+    @borderColor.setter
+    def borderColor(self, newValue):
+        self._borderColor = newValue
+        self._applyStyleSheet()
+
+    @pyqtProperty(int)
+    def borderRadius(self):
+        return self._borderRadius
+
+    @borderRadius.setter
+    def borderRadius(self, newvalue):
+        self._borderRadius = newvalue
+        self._applyStyleSheet()
 
 
 class QSwitch(QFrame):
@@ -46,7 +91,7 @@ class QSwitch(QFrame):
         self.reloadLayerSize()
 
     def setUpLayers(self) -> None:
-        self.backgroundLayer = QFrame(self)
+        self.backgroundLayer = _QSwitchLayer(self)
         self.backgroundLayer.setObjectName('backgroundLayer')
         self.setMinimumSize(kMinimumWidth + 2 * kMargin, kMinimumHeight + 2 * kMargin)
         self.backgroundLayer.move(kMargin, kMargin)
@@ -76,21 +121,27 @@ class QSwitch(QFrame):
     def reloadLayerSize(self) -> None:
         self.backgroundLayer.resize(self.width() - 2 * kMargin, self.height() - 2 * kMargin)
         if self.checked:
-            self.backgroundLayer.setStyleSheet(
-                'QFrame#backgroundLayer {{ background: rgba({}, {}, {}, {}); border: {}px solid rgba({}, {}, {}, {}); border-radius: {}px; }}'.format(
-                    kDefaultTintColor.red(), kDefaultTintColor.green(), kDefaultTintColor.blue(),
-                    kDefaultTintColor.alpha(), kBorderLineWidth, kDefaultTintColor.red(),
-                    kDefaultTintColor.green(),
-                    kDefaultTintColor.blue(),
-                    kDefaultTintColor.alpha(), int((self.height() - 2 * kMargin) / 2) - 1))
+            self.anim = QPropertyAnimation(self.backgroundLayer, b'backgroundColor')
+            self.anim.setDuration(int(1000 * kAnimationDuration))
+            self.anim.setStartValue(self.backgroundLayer.backgroundColor)
+            self.anim.setEndValue(kDefaultTintColor)
+            self.curve = QEasingCurve(QEasingCurve.BezierSpline)
+            self.curve.addCubicBezierSegment(QPointF(0.25, 1.5), QPointF(0.5, 1.0), QPointF(1.0, 1.0))
+            self.anim.setEasingCurve(self.curve)
+            self.anim.start()
+            self.backgroundLayer.borderColor = kDefaultTintColor
+            self.backgroundLayer.borderRadius = int((self.height() - 2 * kMargin) / 2) - 1
         else:
-            self.backgroundLayer.setStyleSheet(
-                'QFrame#backgroundLayer {{ background: rgba({}, {}, {}, {}); border: {}px solid rgba({}, {}, {}, {}); border-radius: {}px; }}'.format(
-                    kDisabledBackgroundColor.red(), kDisabledBackgroundColor.green(), kDisabledBackgroundColor.blue(),
-                    kDisabledBackgroundColor.alpha(), kBorderLineWidth, kDisabledBorderColor.red(),
-                    kDisabledBorderColor.green(),
-                    kDisabledBorderColor.blue(),
-                    kDisabledBorderColor.alpha(), int((self.height() - 2 * kMargin) / 2) - 1))
+            self.anim = QPropertyAnimation(self.backgroundLayer, b'backgroundColor')
+            self.anim.setDuration(int(1000 * kAnimationDuration))
+            self.anim.setStartValue(self.backgroundLayer.backgroundColor)
+            self.anim.setEndValue(self.backgroundLayer.disabledBackgroundColor)
+            self.curve = QEasingCurve(QEasingCurve.BezierSpline)
+            self.curve.addCubicBezierSegment(QPointF(0.25, 1.5), QPointF(0.5, 1.0), QPointF(1.0, 1.0))
+            self.anim.setEasingCurve(self.curve)
+            self.anim.start()
+            self.backgroundLayer.borderColor = kDisabledBorderColor
+            self.backgroundLayer.borderRadius = int((self.height() - 2 * kMargin) / 2) - 1
 
         knobWidth = int((self.width() - 2 * kMargin - 2 * kBorderLineWidth) * (1 / kGoldenRatio))
         roundKnobWidth = knobWidth
@@ -119,17 +170,15 @@ class QSwitch(QFrame):
         return QSize(hint.width() + 2 * kMargin, hint.height() + 2 * kMargin)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        super().mousePressEvent(event)
         if not self.isEnabled():
             return
         self.active = True
         self.reloadLayerSize()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        super().mouseMoveEvent(event)
+        pass
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        super().mouseReleaseEvent(event)
         self.active = False
         self.checked = not self.checked
         self.toggled.emit(self.checked)
@@ -143,6 +192,7 @@ def main(argv: List[str]) -> int:
 
     def cb(isChecked: bool) -> None:
         switch2.checked = isChecked
+
     switch1.toggled.connect(cb)
 
     layoutSwitch1 = QHBoxLayout()
