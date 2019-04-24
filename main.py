@@ -4,70 +4,135 @@
 from typing import List
 import sys
 
-from PyQt5.QtCore import QSize
-from PyQt5.QtGui import QColor, QResizeEvent
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame, QGraphicsDropShadowEffect
+from PyQt5.QtCore import QSize, pyqtSignal, pyqtProperty
+from PyQt5.QtGui import QColor, QResizeEvent, QMouseEvent
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame, \
+    QGraphicsDropShadowEffect
 
+kAnimationDuration = 0.4
+kBorderLineWidth = 1
 kGoldenRatio = 1.61803398875
+kDecreasedGoldenRatio = 1.38
+kKnobBackgroundColor = QColor(255, 255, 255, 1)
+kDefaultTintColor = QColor(69, 219, 92, 1)
+kDisabledBorderColor = QColor(0, 0, 0, 51)
+kDisabledBackgroundColor = QColor(0, 0, 0, 0)
+kMargin = 2
+kMinimumWidth = 32
+kMinimumHeight = 20
 
 
 class QSwitch(QFrame):
+    toggled = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.enabled = True
+        self.active: bool = False
+        self._checked: bool = False
+        self.dragged: bool = False
+        self.draggingTowardsOn: bool = False
+        self.backgroundLayer: QWidget
+        self.knobLayer: QWidget
+        self.knobInsideLayer: QWidget
         self.setUpLayers()
 
+    @pyqtProperty(bool)
+    def checked(self):
+        return self._checked
+
+    @checked.setter
+    def checked(self, newValue):
+        self._checked = newValue
+        self.reloadLayerSize()
+
     def setUpLayers(self) -> None:
-        self.backgroundFrame = QFrame(self)
-        self.backgroundFrame.setObjectName('backgroundFrame')
-        self.backgroundFrame.setMinimumSize(32, 20)
-        self.setMinimumSize(36, 24)
-        self.backgroundFrame.move(2, 2)
+        self.backgroundLayer = QFrame(self)
+        self.backgroundLayer.setObjectName('backgroundLayer')
+        self.setMinimumSize(kMinimumWidth + 2 * kMargin, kMinimumHeight + 2 * kMargin)
+        self.backgroundLayer.move(kMargin, kMargin)
 
-        self.knob = QFrame(self)
-        self.knob.setObjectName('knob')
-        ef = QGraphicsDropShadowEffect()
-        ef.setColor(QColor(0, 0, 0, 77))
-        ef.setBlurRadius(4)
-        ef.setOffset(0, 2)
-        self.knob.setGraphicsEffect(ef)
+        self.knobLayer = QFrame(self)
+        self.knobLayer.setObjectName('knobLayer')
+        knobLayerShadowEffect = QGraphicsDropShadowEffect()
+        knobLayerShadowEffect.setColor(QColor(0, 0, 0, 77))
+        knobLayerShadowEffect.setBlurRadius(4)
+        knobLayerShadowEffect.setOffset(0, 2)
+        self.knobLayer.setGraphicsEffect(knobLayerShadowEffect)
 
-        self.knobInside = QFrame(self)
-        self.knobInside.setObjectName('knobInside')
-        ef2 = QGraphicsDropShadowEffect()
-        ef2.setColor(QColor(0, 0, 0, 89))
-        ef2.setBlurRadius(4)
-        ef2.setOffset(0, 0)
-        self.knobInside.setGraphicsEffect(ef2)
+        self.knobInsideLayer = QFrame(self)
+        self.knobInsideLayer.setObjectName('knobInsideLayer')
+        knobLayerInsideShadowEffect = QGraphicsDropShadowEffect()
+        knobLayerInsideShadowEffect.setColor(QColor(0, 0, 0, 89))
+        knobLayerInsideShadowEffect.setBlurRadius(4)
+        knobLayerInsideShadowEffect.setOffset(0, 0)
+        self.knobInsideLayer.setGraphicsEffect(knobLayerInsideShadowEffect)
 
         self.reloadLayerSize()
-        self.reloadLayer()
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         self.reloadLayerSize()
 
-    def reloadLayer(self) -> None:
-        pass
-
     def reloadLayerSize(self) -> None:
-        self.backgroundFrame.resize(self.width() - 4, self.height() - 4)
-        self.backgroundFrame.setStyleSheet('QFrame#backgroundFrame {{ border: 1px solid rgba(0, 0, 0, 51); border-radius: {0}px; }}'.format(int((self.height() - 4) / 2) - 1))
+        self.backgroundLayer.resize(self.width() - 2 * kMargin, self.height() - 2 * kMargin)
+        if self.checked:
+            self.backgroundLayer.setStyleSheet(
+                'QFrame#backgroundLayer {{ background: rgba({}, {}, {}, {}); border: {}px solid rgba({}, {}, {}, {}); border-radius: {}px; }}'.format(
+                    kDefaultTintColor.red(), kDefaultTintColor.green(), kDefaultTintColor.blue(),
+                    kDefaultTintColor.alpha(), kBorderLineWidth, kDefaultTintColor.red(),
+                    kDefaultTintColor.green(),
+                    kDefaultTintColor.blue(),
+                    kDefaultTintColor.alpha(), int((self.height() - 2 * kMargin) / 2) - 1))
+        else:
+            self.backgroundLayer.setStyleSheet(
+                'QFrame#backgroundLayer {{ background: rgba({}, {}, {}, {}); border: {}px solid rgba({}, {}, {}, {}); border-radius: {}px; }}'.format(
+                    kDisabledBackgroundColor.red(), kDisabledBackgroundColor.green(), kDisabledBackgroundColor.blue(),
+                    kDisabledBackgroundColor.alpha(), kBorderLineWidth, kDisabledBorderColor.red(),
+                    kDisabledBorderColor.green(),
+                    kDisabledBorderColor.blue(),
+                    kDisabledBorderColor.alpha(), int((self.height() - 2 * kMargin) / 2) - 1))
 
-        self.knob.resize(int((self.width() - 4 - 2) * (1 / kGoldenRatio)), self.height() - 4 - 2)
-        self.knob.move(3, 3)
-        self.knob.setStyleSheet('QFrame#knob {{ background-color: white; border-radius: {0}px; }}'.format(int(self.knob.height() / 2) - 1))
+        knobWidth = int((self.width() - 2 * kMargin - 2 * kBorderLineWidth) * (1 / kGoldenRatio))
+        roundKnobWidth = knobWidth
+        if self.active:
+            knobWidth = int((self.width() - 2 * kMargin - 2 * kBorderLineWidth) * (1 / kDecreasedGoldenRatio))
+        self.knobLayer.resize(knobWidth, self.height() - 2 * kMargin - 2 * kBorderLineWidth)
 
-        self.knobInside.resize(int((self.width() - 4 - 2) * (1 / kGoldenRatio)), self.height() - 4 - 2)
-        self.knobInside.move(3, 3)
-        self.knobInside.setStyleSheet('QFrame#knobInside {{ background-color: white; border-radius: {0}px; }}'.format(int(self.knobInside.height() / 2) - 1))
+        knobX = kMargin + kBorderLineWidth
+        if self.checked:
+            knobX = self.width() - knobWidth - kBorderLineWidth - kMargin
 
-        self.setMaximumHeight(self.knob.width() + 2 + 4)
+        self.knobLayer.move(knobX, kMargin + kBorderLineWidth)
+        self.knobLayer.setStyleSheet('QFrame#knobLayer {{ background-color: white; border-radius: {0}px; }}'.format(
+            int(self.knobLayer.height() / 2) - 1))
+
+        self.knobInsideLayer.resize(knobWidth, self.height() - 2 * kMargin - 2 * kBorderLineWidth)
+        self.knobInsideLayer.move(knobX, kMargin + kBorderLineWidth)
+        self.knobInsideLayer.setStyleSheet(
+            'QFrame#knobInsideLayer {{ background-color: white; border-radius: {}px; }}'.format(
+                int(self.knobInsideLayer.height() / 2) - 1))
+
+        self.setMaximumHeight(roundKnobWidth + 2 * kMargin + 2 * kBorderLineWidth)
 
     def sizeHint(self) -> QSize:
-        hint = self.backgroundFrame.sizeHint()
-        return QSize(hint.width() + 4, hint.height() + 4)
+        hint = self.backgroundLayer.sizeHint()
+        return QSize(hint.width() + 2 * kMargin, hint.height() + 2 * kMargin)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        super().mousePressEvent(event)
+        if not self.isEnabled():
+            return
+        self.active = True
+        self.reloadLayerSize()
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        super().mouseReleaseEvent(event)
+        self.active = False
+        self.checked = not self.checked
+        self.toggled.emit(self.checked)
 
 
 def main(argv: List[str]) -> int:
@@ -75,6 +140,10 @@ def main(argv: List[str]) -> int:
 
     switch1 = QSwitch()
     switch2 = QSwitch()
+
+    def cb(isChecked: bool) -> None:
+        switch2.checked = isChecked
+    switch1.toggled.connect(cb)
 
     layoutSwitch1 = QHBoxLayout()
     layoutSwitch1.addStretch()
