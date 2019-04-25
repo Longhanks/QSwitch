@@ -4,19 +4,19 @@
 from typing import List
 import sys
 
-from PyQt5.QtCore import Qt, QSize, pyqtSignal, pyqtProperty, QPropertyAnimation, QEasingCurve, QPointF
+from PyQt5.QtCore import QSize, pyqtSignal, pyqtProperty, QPropertyAnimation, QEasingCurve, QPointF, QParallelAnimationGroup, QPoint
 from PyQt5.QtGui import QColor, QResizeEvent, QMouseEvent
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame, \
-    QGraphicsDropShadowEffect
+    QGraphicsDropShadowEffect, QSizePolicy
 
-kAnimationDuration = 0.4
+kAnimationDuration = 400
 kBorderLineWidth = 1
 kGoldenRatio = 1.61803398875
 kDecreasedGoldenRatio = 1.38
 kKnobBackgroundColor = QColor(255, 255, 255, 255)
 kDefaultTintColor = QColor(79, 220, 116, 255)
 kDisabledBorderColor = QColor(0, 0, 0, 51)
-kMargin = 2
+kMargin = 5
 kMinimumWidth = 32
 kMinimumHeight = 20
 
@@ -79,6 +79,7 @@ class QSwitch(QFrame):
         self.backgroundLayer: QWidget
         self.knobLayer: QWidget
         self.knobInsideLayer: QWidget
+        self.animations = QParallelAnimationGroup(self)
         self.setUpLayers()
 
     @pyqtProperty(bool)
@@ -88,7 +89,7 @@ class QSwitch(QFrame):
     @checked.setter
     def checked(self, newValue):
         self._checked = newValue
-        self.reloadLayerSize()
+        self.reloadLayerSize(animated=True)
 
     def setUpLayers(self) -> None:
         self.backgroundLayer = _QSwitchLayer(self)
@@ -118,50 +119,130 @@ class QSwitch(QFrame):
         super().resizeEvent(event)
         self.reloadLayerSize()
 
-    def reloadLayerSize(self) -> None:
+    def reloadLayerSize(self, animated=False) -> None:
         self.backgroundLayer.resize(self.width() - 2 * kMargin, self.height() - 2 * kMargin)
-        if self.checked:
-            self.anim = QPropertyAnimation(self.backgroundLayer, b'backgroundColor')
-            self.anim.setDuration(int(1000 * kAnimationDuration))
-            self.anim.setStartValue(self.backgroundLayer.backgroundColor)
-            self.anim.setEndValue(kDefaultTintColor)
-            self.curve = QEasingCurve(QEasingCurve.BezierSpline)
-            self.curve.addCubicBezierSegment(QPointF(0.25, 1.5), QPointF(0.5, 1.0), QPointF(1.0, 1.0))
-            self.anim.setEasingCurve(self.curve)
-            self.anim.start()
-            self.backgroundLayer.borderColor = kDefaultTintColor
-            self.backgroundLayer.borderRadius = int((self.height() - 2 * kMargin) / 2) - 1
+        self.backgroundLayer.borderRadius = int((self.height() - 2 * kMargin) / 2) - 1
+
+        self.animations.clear()
+
+        if (self.dragged and self.draggingTowardsOn) or (not self.dragged and self.checked):
+            anim1 = QPropertyAnimation(self.backgroundLayer, b'backgroundColor')
+            anim1.setDuration(kAnimationDuration)
+            anim1.setStartValue(self.backgroundLayer.backgroundColor)
+            anim1.setEndValue(kDefaultTintColor)
+            if not self.dragged:
+                curve1 = QEasingCurve(QEasingCurve.BezierSpline)
+                curve1.addCubicBezierSegment(QPointF(0.25, 1.5), QPointF(0.5, 1.0), QPointF(1.0, 1.0))
+                anim1.setEasingCurve(curve1)
+            self.animations.addAnimation(anim1)
+
+            anim2 = QPropertyAnimation(self.backgroundLayer, b'borderColor')
+            anim2.setDuration(kAnimationDuration)
+            anim2.setStartValue(self.backgroundLayer.borderColor)
+            anim2.setEndValue(kDefaultTintColor)
+            if not self.dragged:
+                curve2 = QEasingCurve(QEasingCurve.BezierSpline)
+                curve2.addCubicBezierSegment(QPointF(0.25, 1.5), QPointF(0.5, 1.0), QPointF(1.0, 1.0))
+                anim2.setEasingCurve(curve2)
+            self.animations.addAnimation(anim2)
         else:
-            self.anim = QPropertyAnimation(self.backgroundLayer, b'backgroundColor')
-            self.anim.setDuration(int(1000 * kAnimationDuration))
-            self.anim.setStartValue(self.backgroundLayer.backgroundColor)
-            self.anim.setEndValue(self.backgroundLayer.disabledBackgroundColor)
-            self.curve = QEasingCurve(QEasingCurve.BezierSpline)
-            self.curve.addCubicBezierSegment(QPointF(0.25, 1.5), QPointF(0.5, 1.0), QPointF(1.0, 1.0))
-            self.anim.setEasingCurve(self.curve)
-            self.anim.start()
-            self.backgroundLayer.borderColor = kDisabledBorderColor
-            self.backgroundLayer.borderRadius = int((self.height() - 2 * kMargin) / 2) - 1
+            anim1 = QPropertyAnimation(self.backgroundLayer, b'backgroundColor')
+            anim1.setDuration(kAnimationDuration)
+            anim1.setStartValue(self.backgroundLayer.backgroundColor)
+            anim1.setEndValue(self.backgroundLayer.disabledBackgroundColor)
+            if not self.dragged:
+                curve1 = QEasingCurve(QEasingCurve.BezierSpline)
+                curve1.addCubicBezierSegment(QPointF(0.25, 1.5), QPointF(0.5, 1.0), QPointF(1.0, 1.0))
+                anim1.setEasingCurve(curve1)
+            self.animations.addAnimation(anim1)
+
+            anim2 = QPropertyAnimation(self.backgroundLayer, b'borderColor')
+            anim2.setDuration(kAnimationDuration)
+            anim2.setStartValue(self.backgroundLayer.borderColor)
+            anim2.setEndValue(kDisabledBorderColor)
+            if not self.dragged:
+                curve2 = QEasingCurve(QEasingCurve.BezierSpline)
+                curve2.addCubicBezierSegment(QPointF(0.25, 1.5),
+                                            QPointF(0.5, 1.0),
+                                            QPointF(1.0, 1.0))
+                anim2.setEasingCurve(curve2)
+            self.animations.addAnimation(anim2)
 
         knobWidth = int((self.width() - 2 * kMargin - 2 * kBorderLineWidth) * (1 / kGoldenRatio))
         roundKnobWidth = knobWidth
         if self.active:
             knobWidth = int((self.width() - 2 * kMargin - 2 * kBorderLineWidth) * (1 / kDecreasedGoldenRatio))
-        self.knobLayer.resize(knobWidth, self.height() - 2 * kMargin - 2 * kBorderLineWidth)
 
-        knobX = kMargin + kBorderLineWidth
-        if self.checked:
+        if animated:
+            anim3 = QPropertyAnimation(self.knobLayer, b'size')
+            anim3.setDuration(kAnimationDuration)
+            anim3.setStartValue(self.knobLayer.size())
+            anim3.setEndValue(QSize(knobWidth, self.height() - 2 * kMargin - 2 * kBorderLineWidth))
+            if not self.dragged:
+                curve3 = QEasingCurve(QEasingCurve.BezierSpline)
+                curve3.addCubicBezierSegment(QPointF(0.25, 1.5), QPointF(0.5, 1.0),
+                                            QPointF(1.0, 1.0))
+                anim3.setEasingCurve(curve3)
+            self.animations.addAnimation(anim3)
+        else:
+            self.knobLayer.resize(knobWidth, self.height() - 2 * kMargin - 2 * kBorderLineWidth)
+
+        if (not self.dragged and not self.checked) or (self.dragged and not self.draggingTowardsOn):
+            knobX = kMargin + kBorderLineWidth
+        else:
             knobX = self.width() - knobWidth - kBorderLineWidth - kMargin
 
-        self.knobLayer.move(knobX, kMargin + kBorderLineWidth)
-        self.knobLayer.setStyleSheet('QFrame#knobLayer {{ background-color: white; border-radius: {0}px; }}'.format(
-            int(self.knobLayer.height() / 2) - 1))
+        if animated:
+            anim4 = QPropertyAnimation(self.knobLayer, b'pos')
+            anim4.setDuration(kAnimationDuration)
+            anim4.setStartValue(self.knobLayer.pos())
+            anim4.setEndValue(QPoint(knobX, kMargin + kBorderLineWidth))
+            if not self.dragged:
+                curve4 = QEasingCurve(QEasingCurve.BezierSpline)
+                curve4.addCubicBezierSegment(QPointF(0.25, 1.5),
+                                             QPointF(0.5, 1.0),
+                                             QPointF(1.0, 1.0))
+                anim4.setEasingCurve(curve4)
+            self.animations.addAnimation(anim4)
+        else:
+            self.knobLayer.move(knobX, kMargin + kBorderLineWidth)
+            self.knobLayer.setStyleSheet('QFrame#knobLayer {{ background-color: white; border-radius: {0}px; }}'.format(
+                int(self.knobLayer.height() / 2) - 1))
 
-        self.knobInsideLayer.resize(knobWidth, self.height() - 2 * kMargin - 2 * kBorderLineWidth)
-        self.knobInsideLayer.move(knobX, kMargin + kBorderLineWidth)
-        self.knobInsideLayer.setStyleSheet(
-            'QFrame#knobInsideLayer {{ background-color: white; border-radius: {}px; }}'.format(
-                int(self.knobInsideLayer.height() / 2) - 1))
+        if animated:
+            anim5 = QPropertyAnimation(self.knobInsideLayer, b'size')
+            anim5.setDuration(kAnimationDuration)
+            anim5.setStartValue(self.knobInsideLayer.size())
+            anim5.setEndValue(QSize(knobWidth, self.height() - 2 * kMargin - 2 * kBorderLineWidth))
+            if not self.dragged:
+                curve5 = QEasingCurve(QEasingCurve.BezierSpline)
+                curve5.addCubicBezierSegment(QPointF(0.25, 1.5),
+                                             QPointF(0.5, 1.0),
+                                             QPointF(1.0, 1.0))
+                anim5.setEasingCurve(curve5)
+            self.animations.addAnimation(anim5)
+        else:
+            self.knobInsideLayer.resize(knobWidth, self.height() - 2 * kMargin - 2 * kBorderLineWidth)
+
+        if animated:
+            anim6 = QPropertyAnimation(self.knobInsideLayer, b'pos')
+            anim6.setDuration(kAnimationDuration)
+            anim6.setStartValue(self.knobInsideLayer.pos())
+            anim6.setEndValue(QPoint(knobX, kMargin + kBorderLineWidth))
+            if not self.dragged:
+                curve6 = QEasingCurve(QEasingCurve.BezierSpline)
+                curve6.addCubicBezierSegment(QPointF(0.25, 1.5),
+                                             QPointF(0.5, 1.0),
+                                             QPointF(1.0, 1.0))
+                anim6.setEasingCurve(curve6)
+            self.animations.addAnimation(anim6)
+        else:
+            self.knobInsideLayer.move(knobX, kMargin + kBorderLineWidth)
+            self.knobInsideLayer.setStyleSheet(
+                'QFrame#knobInsideLayer {{ background-color: white; border-radius: {}px; }}'.format(
+                    int(self.knobInsideLayer.height() / 2) - 1))
+
+        self.animations.start()
 
         self.setMaximumHeight(roundKnobWidth + 2 * kMargin + 2 * kBorderLineWidth)
 
@@ -173,14 +254,31 @@ class QSwitch(QFrame):
         if not self.isEnabled():
             return
         self.active = True
-        self.reloadLayerSize()
+        self.reloadLayerSize(animated=True)
 
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        pass
+    # def mouseMoveEvent(self, event: QMouseEvent) -> None:
+    #     if not self.active:
+    #         return
+    #
+    #     self.dragged = True
+    #     self.draggingTowardsOn = event.pos().x() >= (self.width() - 2 * kMargin) / 2.0
+        self.reloadLayerSize(animated=True)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if not self.isEnabled():
+            return
         self.active = False
-        self.checked = not self.checked
+
+        if not self.dragged:
+            self.checked = not self.checked
+        else:
+            self.checked = self.draggingTowardsOn
+
+        self.dragged = False
+        self.draggingTowardsOn = False
+
+        self.reloadLayerSize(animated=True)
+
         self.toggled.emit(self.checked)
 
 
