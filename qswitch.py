@@ -130,11 +130,11 @@ class QSwitch(QFrame):
 
         self._knobInsideLayer = QFrame(self)
         self._knobInsideLayer.setObjectName('_knobInsideLayer')
-        _knobLayerInsideShadowEffect = QGraphicsDropShadowEffect()
-        _knobLayerInsideShadowEffect.setColor(QColor(0, 0, 0, 89))
-        _knobLayerInsideShadowEffect.setBlurRadius(4)
-        _knobLayerInsideShadowEffect.setOffset(0, 0)
-        self._knobInsideLayer.setGraphicsEffect(_knobLayerInsideShadowEffect)
+        _knobInsideLayerShadowEffect = QGraphicsDropShadowEffect()
+        _knobInsideLayerShadowEffect.setColor(QColor(0, 0, 0, 89))
+        _knobInsideLayerShadowEffect.setBlurRadius(4)
+        _knobInsideLayerShadowEffect.setOffset(0, 0)
+        self._knobInsideLayer.setGraphicsEffect(_knobInsideLayerShadowEffect)
 
         self._redrawLayers()
 
@@ -329,7 +329,7 @@ class QSwitch(QFrame):
                 knobX, QSwitch.DEFAULT_MARGIN + QSwitch.BORDER_LINE_WIDTH
             )
             self._knobLayer.setStyleSheet(
-                'QFrame#_knobLayer {{ background-color: white; border-radius: {0}px; }}'.format(
+                'QFrame#_knobLayer {{ background-color: white; border-radius: {}px; }}'.format(
                     int(self._knobLayer.height() / 2) - 1
                 )
             )
